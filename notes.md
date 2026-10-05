@@ -1,0 +1,4 @@
+- two tables in persistent memory database:
+  - One for thastcriptions: messages (id, session_id, timestamp, role, content, tool_calls)
+  - One for memories/facts: user_memories (id, user_id, fact_text, embedding_vector, last_updated, source_session_id)
+- KV cache: if there is a part of the context sent to the llm that doesn't vary, it is cached, so it is conveninet to define a prefix taht contains invariable data (system prompt...)
