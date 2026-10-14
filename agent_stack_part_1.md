@@ -4361,3 +4361,79 @@ Alice owns the session. The model proposes `send_email` with `user_id: bob`. `ap
 The second assertion is the point. A denial that still asks the user has already treated the call as something a human might permit. The actor was wrong before that question exists.
 
 It is red because nothing in the runtime compares `bob` to `alice`. I will not write the next test until you want it.
+
+
+> [!quote] YOU
+
+If I had a session repository like SessionRepository, is it ok to have there the commit method for saving the checkpoint, according all the things we have been studying
+
+
+> [!abstract] PI
+
+I'll check what `commit` already writes before answering whether a checkpoint belongs there.
+
+
+> [!abstract] PI
+
+No. `SessionRepository.commit` is the wrong writer for a checkpoint.
+
+That method already appends transcript items and updates working state for a session. A checkpoint is not either of those. It is the saved position of one Run: which steps finished, and what they returned. The Session only holds the conversation that Run belongs to.
+
+If `commit` also writes the checkpoint, a failed attempt and the conversation become the same write. You can no longer resume that Run without treating the transcript as the execution position, which is the collapse we already rejected.
+
+The checkpoint row points at the session. It is not written by the session repository. A run store, or a checkpoint store the runtime calls with the `run_id`, is the writer.
+
+
+> [!quote] YOU
+
+I meant the actual commit he have defined ion session_repository, is it the correct location for a method like this, or should it be in a different repository?
+
+
+> [!abstract] PI
+
+You mean the `commit` that already exists. I'll look at what it writes, not at a checkpoint method.
+
+
+> [!abstract] PI
+
+The `commit` method you already have is in the right repository for what it actually writes. It appends transcript items to a session, and the transcript belongs to the session, so `SessionRepository` is the correct writer. It should not move to a run repository.
+
+What it must not become is a checkpoint writer. A checkpoint is the position of one Run. That is a different record, and a different repository, even though the row points back at the session.
+
+The half to watch is `working_state`. Your own store describes it as scratch for the current turn, not as the conversation. Merging that scratch in the same `commit` as the transcript is the part that does not belong there.
+
+
+> [!quote] YOU
+
+how should we control the stop of the runtime in code?
+
+
+> [!abstract] PI
+
+I'll look at how a turn ends in your runtime before saying where a stop belongs.
+
+
+> [!abstract] PI
+
+The runtime decides when a run stops. The control plane can only cancel the lease. The model does not stop the runtime.
+
+In your code a turn already ends in three ways, and they are mixed together. No tool call, or the second response after tools, returns `completed`. Any exception, including a rejected tool, commits `failed` and raises. `response.stop_reason` is stored and never consulted. So "the model finished" and "a boundary refused the call" leave through different doors, and only the exception path says why.
+
+Control it as a decision between steps, not as a killed process. After each model call or tool result, the runtime checks a small set of stop conditions and records which one fired:
+
+- The model proposed no further call.
+- The round cap dropped the next call. You already count `tool_calls_dropped`.
+- Policy or approval refused. That is a stop, and it is not the same event as a handler crash.
+- The control plane cancelled the session lease. The runtime notices that at the next step boundary and stops. It does not let the host kill the worker mid-handler.
+
+The model’s `stop_reason` is an input to the first of those. It is not the stop itself.
+
+
+> [!quote] YOU
+
+from where does stop_reason come?
+
+
+> [!abstract] PI
+
+It comes from the model provider, not from your runtime. In `gemini_client.py` the client copies `response.candidates[0].finish_reason` onto `ModelResponse.stop_reason`. That is Gemini saying why generation ended: it finished the text, it hit a token limit, it wants a tool call, or it was blocked. Your runtime receives that field and does not branch on it. The runtime's own stop, the one from the last answer, is a separate decision.

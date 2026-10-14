@@ -5,3 +5,4 @@
 - Session and runtime are two complete different boundaries:
   - Session owns the conversation history, taht includes the run results, always related with the previous line of the conversation.
   - A run is bounded to the agnetc thing, it is an attempt, the different steps the agent have to perform to solve the request, with its own steps and retry mechanism, the session context is different from the execution state
+- Testing session concurrency locking
